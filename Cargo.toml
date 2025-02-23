@@ -12,7 +12,11 @@ keywords = ["uid", "uuid", "v7", "uuidv7"]
 
 [target.'cfg(all(any(target_arch = "wasm32", target_arch = "wasm64"), target_os = "unknown"))'.dependencies]
 getrandom = { version = "0.2", optional = false, features = ["js"] }
-js-sys = "0.3"
+js-sys = ">= 0.3"
 
 [target.'cfg(not(all(any(target_arch = "wasm32", target_arch = "wasm64"), target_os = "unknown")))'.dependencies]
 getrandom = { version = "0.2", optional = false }
+
+[dev-dependencies]
+js-sys = ">= 0.3"
+wasm-bindgen-test = "0.3.0"

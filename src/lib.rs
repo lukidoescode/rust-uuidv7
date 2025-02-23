@@ -8,31 +8,10 @@ fn hex_format(out: &mut [u8], bin: &[u8]) {
     }
 }
 
-#[cfg(all(
-    any(target_arch = "wasm32", target_arch = "wasm64"),
-    target_os = "unknown"
-))]
-fn hammertime() -> u64 {
-    use js_sys::Date;
-    Date::now() as u64
-}
-
-#[cfg(not(all(
-    any(target_arch = "wasm32", target_arch = "wasm64"),
-    target_os = "unknown"
-)))]
-fn hammertime() -> u64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let start = SystemTime::now();
-    start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_millis() as u64
-}
-
 /// Return a raw UUIDv7 byte array.
 pub fn create_raw() -> [u8; 16] {
-    let ts = hammertime();
+    let ts = generate_hammertime();
+
     let mut buf = [0u8; 16];
     buf[0..8].copy_from_slice(&(ts << 16).to_be_bytes());
 
@@ -64,4 +43,113 @@ pub fn create() -> String {
     hex_format(&mut out[24..], &buf[10..]);
 
     String::from_utf8_lossy(&out).into_owned()
+}
+
+// ------------------------------------------------------------------------------------------------
+// - BEGIN hammertime generators section ----------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
+
+type HammertimeMs = u64;
+
+#[inline(always)]
+fn generate_hammertime() -> HammertimeMs {
+    #[cfg(not(all(
+        any(target_arch = "wasm32", target_arch = "wasm64"),
+        target_os = "unknown"
+    )))]
+    let ts = generate_hammertime_no_js();
+
+    #[cfg(all(
+        any(target_arch = "wasm32", target_arch = "wasm64"),
+        target_os = "unknown"
+    ))]
+    let ts = generate_hammertime_js();
+
+    ts
+}
+
+#[doc(hidden)]
+#[cfg(all(
+    any(target_arch = "wasm32", target_arch = "wasm64"),
+    target_os = "unknown"
+))]
+fn generate_hammertime_js() -> HammertimeMs {
+    use js_sys::Date;
+    Date::now() as HammertimeMs
+}
+
+// this function has to be public in order for the test harness to be able to pick up on it
+#[doc(hidden)]
+#[cfg(not(all(
+    any(target_arch = "wasm32", target_arch = "wasm64"),
+    target_os = "unknown"
+)))]
+fn generate_hammertime_no_js() -> HammertimeMs {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let start = SystemTime::now();
+    start
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_millis() as HammertimeMs
+}
+
+// ------------------------------------------------------------------------------------------------
+// - END hammertime generators section ------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
+
+#[cfg(test)]
+mod test {
+    use std::{thread, time};
+
+    use wasm_bindgen_test::*;
+
+    use super::*;
+
+    // We have to consider slow executors for reliable CI
+    const COMPARE_TOLERANCE: HammertimeMs = 10;
+
+    #[wasm_bindgen_test(unsupported = test)]
+    fn compare_hammertime_100ms() {
+        let result_hammertime_start = generate_hammertime();
+
+        const DURATION_MS: HammertimeMs = 100;
+
+        thread::sleep(time::Duration::from_millis(DURATION_MS));
+        let result_hammertime_end = generate_hammertime();
+
+        // assert that hammertime matches expectations within reason of innaccuracies induced by execution environments
+        assert!(result_hammertime_end >= result_hammertime_start + DURATION_MS - COMPARE_TOLERANCE);
+        assert!(result_hammertime_end <= result_hammertime_start + DURATION_MS + COMPARE_TOLERANCE);
+    }
+
+    #[wasm_bindgen_test(unsupported = test)]
+    fn compare_hammertime_500ms() {
+        let result_hammertime_start = generate_hammertime();
+
+        const DURATION_MS: HammertimeMs = 500;
+
+        thread::sleep(time::Duration::from_millis(DURATION_MS));
+        let result_hammertime_end = generate_hammertime();
+
+        // assert that hammertime matches expectations within reason of innaccuracies induced by execution environments
+        assert!(result_hammertime_end >= result_hammertime_start + DURATION_MS - COMPARE_TOLERANCE);
+        assert!(result_hammertime_end <= result_hammertime_start + DURATION_MS + COMPARE_TOLERANCE);
+    }
+
+    #[wasm_bindgen_test(unsupported = test)]
+    fn compare_hammertime_1000ms() {
+        let result_hammertime_start = generate_hammertime();
+
+        const DURATION_MS: HammertimeMs = 1000;
+
+        thread::sleep(time::Duration::from_millis(DURATION_MS));
+        let result_hammertime_end = generate_hammertime();
+
+        println!("start: {result_hammertime_start}");
+        println!("end:   {result_hammertime_end}");
+
+        // assert that hammertime matches expectations within reason of innaccuracies induced by execution environments
+        assert!(result_hammertime_end >= result_hammertime_start + DURATION_MS - COMPARE_TOLERANCE);
+        assert!(result_hammertime_end <= result_hammertime_start + DURATION_MS + COMPARE_TOLERANCE);
+    }
 }
